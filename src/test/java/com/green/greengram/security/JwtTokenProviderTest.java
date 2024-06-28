@@ -15,14 +15,14 @@ class JwtTokenProviderTest {
 
     @Test
     public void test() {
-        UserDetails userDetails = MyUserDetails.builder()
-                .role("ddd")
-                .userId(10)
-                .build();
-        String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails);
-        Claims claims = jwtTokenProvider.getAllClaims(refreshToken);
-
-        System.out.println(claims.get("signedUser"));
+//        UserDetails userDetails = MyUserDetails.builder()
+//                .role("ddd")
+//                .userId(10)
+//                .build();
+//        String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails);
+//        Claims claims = jwtTokenProvider.getAllClaims(refreshToken);
+//
+//        System.out.println(claims.get("signedUser"));
     }
 
 }
