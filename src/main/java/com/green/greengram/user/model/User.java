@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Getter
-@AllArgsConstructor
+@Setter
 @EqualsAndHashCode
 public class User {
     private long userId;
@@ -16,7 +16,4 @@ public class User {
     private String pic;
     private String createdAt;
     private String updatedAt;
-
-
-
 }

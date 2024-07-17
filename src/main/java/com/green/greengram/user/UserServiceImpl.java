@@ -3,7 +3,11 @@ package com.green.greengram.user;
 import com.green.greengram.common.AppProperties;
 import com.green.greengram.common.CookieUtils;
 import com.green.greengram.common.CustomFileUtils;
+import com.green.greengram.common.MyCommonUtils;
+import com.green.greengram.exception.CustomException;
+import com.green.greengram.exception.MemberErrorCode;
 import com.green.greengram.security.AuthenticationFacade;
+import com.green.greengram.security.SignInProviderType;
 import com.green.greengram.security.jwt.JwtTokenProviderV2;
 import com.green.greengram.security.MyUser;
 import com.green.greengram.security.MyUserDetails;
@@ -13,7 +17,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.mindrot.jbcrypt.BCrypt;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -38,6 +42,7 @@ public class UserServiceImpl implements UserService {
     //SecurityContextHolder > Context > Authentication(UsernamePasswordAuthenticationToken) > MyUserDetails > MyUser
 
     public int signUpPostReq(MultipartFile pic, SignUpPostReq p){
+        p.setProviderType( SignInProviderType.LOCAL );
         String saveFileName = customFileUtils.makeRandomFileName(pic);
 
         p.setPic(saveFileName);
@@ -61,38 +66,46 @@ public class UserServiceImpl implements UserService {
     }
 
     public SignInPostRes signInPost(HttpServletResponse res, SignInPostReq p) {
-        User user = mapper.signInPost(p.getUid());
+        p.setProviderType(SignInProviderType.LOCAL.name());
+        //p.setProviderType("LOCAL");
+        List<UserInfo> userInfoList = mapper.signInPost(p);
 
-        if (user == null) {
-            throw new RuntimeException("아이디를 확인해주세요.");
-        }
-        if (!BCrypt.checkpw(p.getUpw(), user.getUpw())) {
-            throw new RuntimeException("비밀번호를 확인해주세요.");
+        UserInfoRoles userInfoRoles = MyCommonUtils.convertToUserInfoRoles(userInfoList);
+
+        if (userInfoRoles == null || !passwordEncoder.matches(p.getUpw(), userInfoRoles.getUpw())) {
+            throw new CustomException(MemberErrorCode.INCORRECT_ID_PW);
         }
 
         MyUser myUser = MyUser.builder()
-                .userId(user.getUserId())
-                .role("ROLE_USER")
+                .userId(userInfoRoles.getUserId())
+                .roles(userInfoRoles.getRoles())
                 .build();
-
+        /*
+        access, refresh token에 myUser(유저pk, 권한정보)를 담는다.
+        refresh token에 myUser정보를 넣는 이유는 access token을 재발급 받을 때,
+        access token에 myUser를 담기 위해서 담는다.
+        왜 담았냐. FE가 accessToken을 계속 백엔드로 요청을 보낼 때, Header에 넣어서 보내준다.
+        요청이 올 때마다 Request에 token이 담겨져 있는지 체크 (JwtAuthenticationFilter에서 한다.)
+        token에 담겨져 있는 myUser를 빼내서 사용하기 위해 myUser를 담았다!
+         */
         String accessToken = jwtTokenProvider.generateAccessToken(myUser);
         String refreshToken = jwtTokenProvider.generateRefreshToken(myUser);
 
-        //refreshToken은 보안 쿠키를 이용해서 처리
+        //refreshToken은 보안 쿠키를 이용해서 처리(FE가 따로 작업을 하지 않아도 아래 cookie값은 항상 넘어온다.)
         int refreshTokenMaxAge = appProperties.getJwt().getRefreshTokenCookieMaxAge();
-        cookieUtils.deleteCookie(res, "refresh-token");
-        cookieUtils.setCookie(res, "refresh-token", refreshToken, refreshTokenMaxAge);
+        cookieUtils.deleteCookie(res, appProperties.getJwt().getRefreshTokenCookieName());
+        cookieUtils.setCookie(res, appProperties.getJwt().getRefreshTokenCookieName(), refreshToken, refreshTokenMaxAge);
 
         return SignInPostRes.builder()
-                .userId(user.getUserId())
-                .nm(user.getNm())
-                .pic(user.getPic())
+                .userId(userInfoRoles.getUserId()) //프로필 사진 띄울때 사용 (프로필 사진 주소에 pk값이 포함됨)
+                .nm(userInfoRoles.getNm())
+                .pic(userInfoRoles.getPic())
                 .accessToken(accessToken)
                 .build();
     }
 
-    public Map getAccessToken(HttpServletRequest req) {
-        Cookie cookie = cookieUtils.getCookie(req, "refresh-token");
+    public Map<String, String> getAccessToken(HttpServletRequest req) {
+        Cookie cookie = cookieUtils.getCookie(req, appProperties.getJwt().getRefreshTokenCookieName());
         if(cookie == null) { // refresh-token 값이 쿠키에 존재 여부
             throw new RuntimeException();
         }
@@ -106,8 +119,9 @@ public class UserServiceImpl implements UserService {
 
         String accessToken = jwtTokenProvider.generateAccessToken(myUser);
 
-        Map map = new HashMap();
+        Map<String, String> map = new HashMap();
         map.put("accessToken", accessToken);
+        map.get("accessToken");
         return map;
     }
 

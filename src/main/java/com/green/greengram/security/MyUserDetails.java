@@ -6,25 +6,43 @@ import lombok.*;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
-import java.util.Collection;
-import java.util.Collections;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 
+import java.util.*;
 
 
 @NoArgsConstructor
 @Setter
 @Getter
-public class MyUserDetails implements UserDetails {
+//시큐리티에서 로그인 처리를 할 때 사용하는 객체
+public class MyUserDetails implements UserDetails, OAuth2User {
 
-    private MyUser myUser;
+    private MyUser myUser; //JWT 만들 때 payload에 담을 데이터를 담은 객체
+
+    @Override
+    public Map<String, Object> getAttributes() {
+        return null;
+    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-//        List<GrantedAuthority> list = new ArrayList();
-//        list.add(new SimpleGrantedAuthority(role));
-//        return list;
+        // 단수 > 복수로 변경
+        // (1)
+        // return Collections.singletonList(new SimpleGrantedAuthority(myUser.getRoles()));
 
-        return Collections.singletonList(new SimpleGrantedAuthority(myUser.getRole()));
+        // (2)
+        // List<GrantedAuthority> list2 = new ArrayList();
+        // list2.add(new SimpleGrantedAuthority("ROLE_USER"));
+        // return list2;
+
+        // (1), (2)는 동일한 결과
+
+        // List<String>  >>   List<GrantedAuthority> 변경하는 작업
+        List<GrantedAuthority> list = new ArrayList();
+        for(String role : myUser.getRoles()) {
+            list.add(new SimpleGrantedAuthority(role));
+        }
+        return list;
     }
 
     @Override
@@ -34,7 +52,7 @@ public class MyUserDetails implements UserDetails {
 
     @Override
     public String getUsername() {
-        return null;
+        return myUser == null ? "GUEST" : String.valueOf(myUser.getUserId());
     }
 
     @Override
@@ -55,5 +73,10 @@ public class MyUserDetails implements UserDetails {
     @Override
     public boolean isEnabled() {
         return false;
+    }
+
+    @Override
+    public String getName() {
+        return null;
     }
 }
